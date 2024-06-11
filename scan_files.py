@@ -52,14 +52,8 @@ def process_file(file_path):
                     result = query_pattern.search(match)
                     if result:
                         sql_query = result.group(1).strip()
-                        #check aliases sql
-                        is_aliase = fnc.has_aliases(sql_query)
-                        if is_aliase:
-                            # Extract table and column names
-                            column_map = fnc.aliase_table_column_names(sql_query)
-                        else:
-                            column_map = fnc.not_aliase_table_column_names(sql_query)
-
+                        # Extract table and column names
+                        column_map = fnc.extract_table_column_names(sql_query)
                         # Write results to logfile
                         for table, columns in column_map.items():
                             logging.info(f"Table Name: {table}")
@@ -75,8 +69,8 @@ def main():
     start_time = time.time()
     print(f"Script started at: {time.ctime(start_time)}")
     files = [file for file in rootDir.rglob('*') if file.is_file()]
-    with ThreadPoolExecutor() as executor:
-        executor.map(process_file, files)
+    for file in files:
+         process_file(file)
     end_time = time.time()
     print(f"Number of files containing <cfquery> tags: {len(file_name)}")
     print(f"Script ended at: {time.ctime(end_time)}")
