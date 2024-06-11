@@ -35,14 +35,31 @@ def extract_table_column_names(sql_query):
                 column_map[table_name]['select'].append(column)
 
     # Extract WHERE clause columns
-    where_clause_regex = re.compile(r'WHERE\s+(.*?)(ORDER\s+BY|$)', re.IGNORECASE | re.DOTALL)
+    is_order_by = re.compile(r'ORDER\s+BY\s+(.*)', re.IGNORECASE | re.DOTALL)
+    is_order_by_exit = is_order_by.findall(sql_query)
+
+    is_group_by = re.compile(r'GROUP\s+BY\s+(.*)', re.IGNORECASE | re.DOTALL)
+    is_group_by_exit = is_group_by.findall(sql_query)
+    not_order_group = False
+    
+    if is_order_by_exit:
+        where_clause_regex = re.compile(r'WHERE\s+(.*?)(ORDER\s+BY|$)', re.IGNORECASE | re.DOTALL)
+    elif is_group_by_exit:
+        where_clause_regex = re.compile(r'WHERE\s+(.*?)(GROUP\s+BY|$)', re.IGNORECASE | re.DOTALL)
+    else :
+        where_clause_regex = re.compile(r'WHERE\s+(.*)', re.IGNORECASE | re.DOTALL)
+        not_order_group = True
+
     where_clause = where_clause_regex.findall(sql_query)
     if where_clause:
-        if column_regex.findall(where_clause[0][0]):
-            where_columns = column_regex.findall(where_clause[0][0])
+        if not_order_group == False:
+            where_columns = where_clause[0][0]
         else:
-            where_columns = simple_column_regex.findall(where_clause[0][0])
-            where_columns = [(list(table_dict.keys())[0], column) for column in where_columns]
+            where_columns = where_clause[0]
+        pattern = re.compile(r'\b(\w+)\s*=')
+        columns_with_where = pattern.findall(where_columns)
+        where_columns = [(list(table_dict.keys())[0], column) for column in columns_with_where]
+   
         for alias, column in where_columns:
             if alias in table_dict:
                 table_name = table_dict[alias]
@@ -52,6 +69,7 @@ def extract_table_column_names(sql_query):
     order_by_clause_regex = re.compile(r'ORDER\s+BY\s+(.*)', re.IGNORECASE | re.DOTALL)
     order_by_clause = order_by_clause_regex.findall(sql_query)
     if order_by_clause:
+
         if column_regex.findall(order_by_clause[0]):
             order_columns = column_regex.findall(order_by_clause[0])
         else:
