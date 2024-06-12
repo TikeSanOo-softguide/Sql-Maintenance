@@ -166,8 +166,6 @@ def extract_table_column_names_with_join(sql_query):
 
     return column_map         
 def extract_table_column_names_with_sub_pat1(sql_query):
-    # from_select_pattern = re.compile(r"FROM\s*\(\s*SELECT\s.*?\)\s", re.IGNORECASE | re.DOTALL)
-    # from_select_matches = from_select_pattern.findall(sql_query)
     parts = re.split(r"(?i)SELECT", sql_query)
     res_query = "SELECT " + parts[2]
     column_map = extract_table_column_names_with_join(res_query)
