@@ -36,6 +36,15 @@ def remove_all_comments(content):
     cleaned_content = comment_pattern.sub('', cleaned_nested_content)
     return cleaned_content
 
+def remove_coldfusion_syntax(sql_query):
+    cf_tags_pattern = re.compile(r'<\/?cf[^>]*>', re.IGNORECASE)
+    cf_comments_pattern = re.compile(r'<!---.*?--->', re.DOTALL)
+    cf_expressions_pattern = re.compile(r'#[^#]*#')
+    sql_query = re.sub(cf_tags_pattern, '', sql_query)
+    sql_query = re.sub(cf_comments_pattern, '', sql_query)
+    sql_query = re.sub(cf_expressions_pattern, '', sql_query)
+    return sql_query
+
 def process_file(file_path):
     try:
         with file_path.open('r', encoding='latin-1') as file:
@@ -52,14 +61,23 @@ def process_file(file_path):
                     result = query_pattern.search(match)
                     if result:
                         sql_query = result.group(1).strip()
-                        # Extract table and column names
-                        column_map = fnc.extract_table_column_names(sql_query)
-                        # Write results to logfile
+                        cleaned_sql_query = remove_coldfusion_syntax(sql_query)
+                        pattern1 = fnc.validate_sql_pattern1(cleaned_sql_query)
+                        if pattern1:
+                            column_map = fnc.extract_table_column_names(cleaned_sql_query)
+                        elif not pattern1:
+                            column_map = fnc.extract_table_column_names_with_join(cleaned_sql_query)
+
                         for table, columns in column_map.items():
-                            logging.info(f"Table Name: {table}")
+                            if not pattern1:
+                                join_tables = ', '.join(columns['join'])
+                                table += ', ' + join_tables
+
+                            logging.info(f"Table Name: {table}")                                
                             logging.info(f"Select Columns: {columns['select']}")
                             logging.info(f"Where Columns: {columns['where']}")
-                            logging.info(f"Order Columns: {columns['order']}\n")
+                            logging.info(f"Order Columns: {columns['order']}")
+                            logging.info(f"Group Columns: {columns['group']}\n")
     except UnicodeDecodeError:
         print(f'File: {file_path} - Unable to decode with latin-1')
         with error_log_path.open('a', encoding='utf-8') as error_log:
@@ -72,6 +90,7 @@ def main():
     for file in files:
          process_file(file)
     end_time = time.time()
+
     print(f"Number of files containing <cfquery> tags: {len(file_name)}")
     print(f"Script ended at: {time.ctime(end_time)}")
     print(f"Total processing time: {end_time - start_time:.2f} seconds")
