@@ -61,23 +61,67 @@ def process_file(file_path):
                     result = query_pattern.search(match)
                     if result:
                         sql_query = result.group(1).strip()
-                        cleaned_sql_query = remove_coldfusion_syntax(sql_query)
-                        pattern1 = fnc.validate_sql_pattern1(cleaned_sql_query)
-                        if pattern1:
-                            column_map = fnc.extract_table_column_names(cleaned_sql_query)
-                        elif not pattern1:
-                            column_map = fnc.extract_table_column_names_with_join(cleaned_sql_query)
+                        is_select = fnc.has_select_query(sql_query)
+                        is_insert = fnc.has_insert_query(sql_query)
+                        is_update = fnc.has_update_query(sql_query)
+                        is_delete = fnc.has_delete_query(sql_query)
+                        if is_select:
+                            cleaned_sql_query = remove_coldfusion_syntax(sql_query)
+                            pattern1 = fnc.validate_sql_pattern1(cleaned_sql_query)
+                            if pattern1:
+                                column_map = fnc.extract_table_column_names(cleaned_sql_query)
+                            elif not pattern1:
+                                column_map = fnc.extract_table_column_names_with_join(cleaned_sql_query)
 
-                        for table, columns in column_map.items():
-                            if not pattern1:
-                                join_tables = ', '.join(columns['join'])
-                                table += ', ' + join_tables
+                            for table, columns in column_map.items():
+                                if not pattern1:
+                                    join_tables = ', '.join(columns['join'])
+                                    table += ', ' + join_tables
 
-                            logging.info(f"Table Name: {table}")                                
-                            logging.info(f"Select Columns: {columns['select']}")
-                            logging.info(f"Where Columns: {columns['where']}")
-                            logging.info(f"Order Columns: {columns['order']}")
-                            logging.info(f"Group Columns: {columns['group']}\n")
+                                logging.info(f"Select Table Name: {table}")                                
+                                logging.info(f"Select Columns: {columns['select']}")
+                                logging.info(f"Where Columns: {columns['where']}")
+                                logging.info(f"Order Columns: {columns['order']}")
+                                logging.info(f"Group Columns: {columns['group']}\n")
+                        if is_insert:
+                            table_name, columns = fnc.insert_table_column_names(sql_query)
+                            if table_name and columns:
+                                # Log table name and column names
+                                logging.info("Insert Table Name: %s", table_name)
+                                logging.info("Insert Columns: %s \n", columns)
+                        if is_update:
+                            # Extract table name, set columns, and where columns
+                            table_name, set_columns, where_columns = fnc.update_table_column_names(sql_query)
+                            if table_name and set_columns and where_columns:
+                                # Log table name, set columns, and where columns
+                                logging.info("Update Table Name: %s", table_name)
+                                logging.info("Set Columns: %s", set_columns)
+                                logging.info("Where Columns: %s \n", where_columns)
+                        if is_delete:
+                            # Extract table name and where columns
+                            table_name, where_columns = fnc.extract_delete_info(sql_query)
+                            if table_name and where_columns:
+                                # Log table name and where columns
+                                logging.info("Delete Table Name: %s", table_name)
+                                logging.info("Where Columns: %s \n", where_columns)
+                    #     sql_query = result.group(1).strip()
+                    #     cleaned_sql_query = remove_coldfusion_syntax(sql_query)
+                    #     pattern1 = fnc.validate_sql_pattern1(cleaned_sql_query)
+                    #     if pattern1:
+                    #         column_map = fnc.extract_table_column_names(cleaned_sql_query)
+                    #     elif not pattern1:
+                    #         column_map = fnc.extract_table_column_names_with_join(cleaned_sql_query)
+
+                    #     for table, columns in column_map.items():
+                    #         if not pattern1:
+                    #             join_tables = ', '.join(columns['join'])
+                    #             table += ', ' + join_tables
+
+                    #         logging.info(f"Table Name: {table}")                                
+                    #         logging.info(f"Select Columns: {columns['select']}")
+                    #         logging.info(f"Where Columns: {columns['where']}")
+                    #         logging.info(f"Order Columns: {columns['order']}")
+                    #         logging.info(f"Group Columns: {columns['group']}\n")
     except UnicodeDecodeError:
         print(f'File: {file_path} - Unable to decode with latin-1')
         with error_log_path.open('a', encoding='utf-8') as error_log:
