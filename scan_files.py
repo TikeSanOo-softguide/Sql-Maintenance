@@ -14,7 +14,7 @@ if not os.path.exists(folder_path):
 
 # Set up logging
 log_file = os.path.join(folder_path, "query_analysis.log")
-logging.basicConfig(filename=log_file, level=logging.INFO, format='%(message)s', filemode='w')
+logging.basicConfig(filename=log_file,encoding='utf-8', level=logging.INFO, format='%(message)s', filemode='w')
 
 config = configparser.ConfigParser()
 config.read('config.ini', encoding='utf-8')
@@ -48,7 +48,7 @@ def remove_coldfusion_syntax(sql_query):
 
 def process_file(file_path):
     try:
-        with file_path.open('r', encoding='latin-1') as file:
+        with file_path.open('r', encoding='utf-8') as file:
             file_contents = file.read()
             uncommented_contents = remove_all_comments(file_contents)  # Remove comments first
             matches = cfquery_pattern.findall(uncommented_contents)  # Find <cfquery> tags
@@ -111,9 +111,8 @@ def process_file(file_path):
                                 logging.info("Where Columns: %s \n", where_columns)
 
     except UnicodeDecodeError:
-        print(f'File: {file_path} - Unable to decode with latin-1')
         with error_log_path.open('a', encoding='utf-8') as error_log:
-            error_log.write(f'File: {file_path} - Unable to decode with latin-1\n')
+            error_log.write(f'File: {file_path} - Unable to decode with utf-8\n')
 
 def main():
     start_time = time.time()
