@@ -112,6 +112,7 @@ def extract_table_column_names_with_join(sql_query):
     join_table_names = join_table_name_regex.findall(sql_query)
     join_table_list = []
     column_list = []
+    
     column_map = defaultdict(lambda: {'select': [], 'where': [], 'join': [], 'order': [], 'group': []})
     
     select_clause_regex = re.compile(r'SELECT\s+(.*?)\s+FROM', re.IGNORECASE | re.DOTALL)
@@ -164,7 +165,8 @@ def extract_table_column_names_with_join(sql_query):
         for column in group_by_clauses:
             column_map[select_table_name[0]]['group'].append(column)
 
-    return column_map         
+    return column_map
+         
 def extract_table_column_names_with_sub_pat1(sql_query):
     # from_select_pattern = re.compile(r"FROM\s*\(\s*SELECT\s.*?\)\s", re.IGNORECASE | re.DOTALL)
     # from_select_matches = from_select_pattern.findall(sql_query)

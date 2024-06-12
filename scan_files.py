@@ -17,8 +17,9 @@ log_file = os.path.join(folder_path, "query_analysis.log")
 logging.basicConfig(filename=log_file, level=logging.INFO, format='%(message)s', filemode='w')
 
 config = configparser.ConfigParser()
-config.read('config.ini')
+config.read('config.ini', encoding='utf-8')
 rootDir = Path(config['DEFAULT']['rootDir'])
+
 logDir = Path("logfile")
 cfquery_pattern = re.compile(r'<cfquery\b.*?</cfquery>', re.DOTALL | re.IGNORECASE)
 file_name = []
@@ -65,6 +66,8 @@ def process_file(file_path):
                         is_insert = fnc.has_insert_query(sql_query)
                         is_update = fnc.has_update_query(sql_query)
                         is_delete = fnc.has_delete_query(sql_query)
+                        column_map = {}
+                    
                         if is_select:
                             cleaned_sql_query = remove_coldfusion_syntax(sql_query)
                             pattern1 = fnc.validate_sql_pattern1(cleaned_sql_query)
@@ -74,6 +77,7 @@ def process_file(file_path):
                                 column_map = fnc.extract_table_column_names_with_join(cleaned_sql_query)
                             elif pattern1 == 'subquery from select':
                                 column_map = fnc.extract_table_column_names_with_sub_pat1(cleaned_sql_query)
+                                 
                             for table, columns in column_map.items():
                                 if pattern1 == 'simple join':
                                     join_tables = ', '.join(columns['join'])
@@ -105,24 +109,7 @@ def process_file(file_path):
                                 # Log table name and where columns
                                 logging.info("Delete Table Name: %s", table_name)
                                 logging.info("Where Columns: %s \n", where_columns)
-                    #     sql_query = result.group(1).strip()
-                    #     cleaned_sql_query = remove_coldfusion_syntax(sql_query)
-                    #     pattern1 = fnc.validate_sql_pattern1(cleaned_sql_query)
-                    #     if pattern1:
-                    #         column_map = fnc.extract_table_column_names(cleaned_sql_query)
-                    #     elif not pattern1:
-                    #         column_map = fnc.extract_table_column_names_with_join(cleaned_sql_query)
 
-                    #     for table, columns in column_map.items():
-                    #         if not pattern1:
-                    #             join_tables = ', '.join(columns['join'])
-                    #             table += ', ' + join_tables
-
-                    #         logging.info(f"Table Name: {table}")                                
-                    #         logging.info(f"Select Columns: {columns['select']}")
-                    #         logging.info(f"Where Columns: {columns['where']}")
-                    #         logging.info(f"Order Columns: {columns['order']}")
-                    #         logging.info(f"Group Columns: {columns['group']}\n")
     except UnicodeDecodeError:
         print(f'File: {file_path} - Unable to decode with latin-1')
         with error_log_path.open('a', encoding='utf-8') as error_log:
