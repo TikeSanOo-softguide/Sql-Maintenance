@@ -68,13 +68,14 @@ def process_file(file_path):
                         if is_select:
                             cleaned_sql_query = remove_coldfusion_syntax(sql_query)
                             pattern1 = fnc.validate_sql_pattern1(cleaned_sql_query)
-                            if pattern1:
+                            if pattern1 == 'simple select':
                                 column_map = fnc.extract_table_column_names(cleaned_sql_query)
-                            elif not pattern1:
+                            elif pattern1 == 'simple join':
                                 column_map = fnc.extract_table_column_names_with_join(cleaned_sql_query)
-
+                            elif pattern1 == 'subquery from select':
+                                column_map = fnc.extract_table_column_names_with_sub_pat1(cleaned_sql_query)
                             for table, columns in column_map.items():
-                                if not pattern1:
+                                if pattern1 == 'simple join':
                                     join_tables = ', '.join(columns['join'])
                                     table += ', ' + join_tables
 

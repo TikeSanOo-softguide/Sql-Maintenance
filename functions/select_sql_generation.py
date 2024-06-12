@@ -11,15 +11,14 @@ def extract_where_column_names(sql_query,is_group_by_exit,is_order_by_exit):
         not_order_group = True
 
     where_clause = where_clause_regex.findall(sql_query)
+    where_columns = ''
     if where_clause:
         if not_order_group == False:
             where_columns = where_clause[0][0]
         else:
             where_columns = where_clause[0]
-        pattern = re.compile(r'(\b[\w.]+)\s*=')
-        columns_with_where = pattern.findall(where_columns)
 
-    return columns_with_where 
+    return where_columns 
 
 def extract_table_column_names(sql_query):
       # Regular expressions to match table aliases, columns, and table names
@@ -60,11 +59,16 @@ def extract_table_column_names(sql_query):
 
     group_by_regex = re.compile(r'GROUP\s+BY\s+(.*)', re.IGNORECASE | re.DOTALL)
     group_by_clause = group_by_regex.findall(sql_query)
+    columns_with_where = []
 
-    columns_with_where = extract_where_column_names(sql_query,order_by_clause,group_by_clause) 
-    where_columns = [(list(table_dict.keys())[0], column) for column in columns_with_where]    
+    where_columns = extract_where_column_names(sql_query,order_by_clause,group_by_clause)
+    # pattern = re.compile(r'(\w+)\.(\w+)')
+    # columns_with_where = pattern.findall(result)
+    pattern = re.compile(r'\b(\w+)\s*=')
+    columns_with_where = pattern.findall(where_columns)
+    columns = [(list(table_dict.keys())[0], column) for column in columns_with_where]
 
-    for alias, column in where_columns:
+    for alias, column in columns:
         if alias in table_dict:
             table_name = table_dict[alias]
             column_map[table_name]['where'].append(column)
@@ -106,7 +110,6 @@ def extract_table_column_names_with_join(sql_query):
     join_table_name_regex = re.compile(r'(JOIN)\s+(.+?)\s+(ON|$)', re.IGNORECASE)
     select_table_name = table_name_regex.findall(sql_query)
     join_table_names = join_table_name_regex.findall(sql_query)
-
     join_table_list = []
     column_list = []
     column_map = defaultdict(lambda: {'select': [], 'where': [], 'join': [], 'order': [], 'group': []})
@@ -115,7 +118,7 @@ def extract_table_column_names_with_join(sql_query):
     select_clause = select_clause_regex.findall(sql_query)
     select_regex = re.compile(r'([^,]+)')
     select_column = select_regex.findall(select_clause[0])
-
+    
     for match in select_column:
         cleaned_match = re.sub(r'\s+AS\s+\w+', '', match, flags=re.IGNORECASE).strip()  
         column_map[select_table_name[0]]['select'].append(cleaned_match)
@@ -147,7 +150,9 @@ def extract_table_column_names_with_join(sql_query):
     group_by_regex = re.compile(r'GROUP\s+BY\s+(.*)', re.IGNORECASE | re.DOTALL)
     group_by_clauses = group_by_regex.findall(sql_query)
 
-    columns_with_where = extract_where_column_names(sql_query,order_by_clauses,group_by_clauses)    
+    result = extract_where_column_names(sql_query,order_by_clauses,group_by_clauses)
+    pattern = re.compile(r'(\b[\w.]+)\s*=')
+    columns_with_where = pattern.findall(result) 
     for column in columns_with_where:
         column_map[select_table_name[0]]['where'].append(column)
    
@@ -160,3 +165,10 @@ def extract_table_column_names_with_join(sql_query):
             column_map[select_table_name[0]]['group'].append(column)
 
     return column_map         
+def extract_table_column_names_with_sub_pat1(sql_query):
+    # from_select_pattern = re.compile(r"FROM\s*\(\s*SELECT\s.*?\)\s", re.IGNORECASE | re.DOTALL)
+    # from_select_matches = from_select_pattern.findall(sql_query)
+    parts = re.split(r"(?i)SELECT", sql_query)
+    res_query = "SELECT " + parts[2]
+    column_map = extract_table_column_names_with_join(res_query)
+    return column_map
