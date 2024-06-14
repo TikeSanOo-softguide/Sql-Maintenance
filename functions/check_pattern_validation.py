@@ -54,3 +54,10 @@ def validate_sql_pattern(sql_query):
         query_pattern = 'Not sql exists' 
     
     return query_pattern
+
+# Function to extract column names
+def extract_column_name(col):
+    # Split by dot and take the last part
+    parts = col.split('.')
+    column_name = parts[-1]
+    return column_name
