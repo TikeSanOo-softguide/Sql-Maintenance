@@ -107,20 +107,22 @@ def process_file(file_path):
                             for table, columns in column_map.items():
                                 if 'join' in columns:
                                     if columns['join']:
-                                        join_tables = ', '.join(columns['join'])
-                                        table += ', ' + join_tables
+                                        join_tables = ','.join(columns['join'])
+                                        table += ',' + join_tables
 
                                 query_analysis_logger.info(f"Select Table Name: {table}")                                
                                 query_analysis_logger.info(f"Select Columns: {columns['select']}")
                                 query_analysis_logger.info(f"Where Columns: {columns['where']}")
                                 query_analysis_logger.info(f"Order Columns: {columns['order']}")
-                                query_analysis_logger.info(f"Group Columns: {columns['group']}\n")
+                                query_analysis_logger.info(f"Group Columns: {columns['group']}")
+                                query_analysis_logger.info("===================================")
                         if is_insert:
                             table_name, columns = fnc.insert_table_column_names(sql_query)
                             if table_name and columns:
                                 # Log table name and column names
                                 query_analysis_logger.info("Insert Table Name: %s", table_name)
-                                query_analysis_logger.info("Insert Columns: %s \n", columns)
+                                query_analysis_logger.info("Insert Columns: %s ", columns)
+                                query_analysis_logger.info("===================================")
                         if is_update:
                             # Extract table name, set columns, and where columns
                             table_name, set_columns, where_columns = fnc.update_table_column_names(sql_query)
@@ -128,15 +130,16 @@ def process_file(file_path):
                                 # Log table name, set columns, and where columns
                                 query_analysis_logger.info("Update Table Name: %s", table_name)
                                 query_analysis_logger.info("Set Columns: %s", set_columns)
-                                query_analysis_logger.info("Where Columns: %s \n", where_columns)
+                                query_analysis_logger.info("Where Columns: %s", where_columns)
+                                query_analysis_logger.info("===================================")
                         if is_delete:
                             # Extract table name and where columns
                             table_name, where_columns = fnc.extract_delete_info(sql_query)
                             if table_name and where_columns:
                                 # Log table name and where columns
                                 query_analysis_logger.info("Delete Table Name: %s", table_name)
-                                query_analysis_logger.info("Where Columns: %s \n", where_columns)
-
+                                query_analysis_logger.info("Where Columns: %s", where_columns)
+                                query_analysis_logger.info("===================================")
     except UnicodeDecodeError:
         with error_log_path.open('a', encoding='utf-8') as error_log:
             error_log.write(f'File: {file_path} - Unable to decode with utf-8\n')
@@ -146,7 +149,8 @@ def main():
     print(f"Script started at: {time.ctime(start_time)}")
     files = [file for file in rootDir.rglob('*') if file.is_file()]
     for file in files:
-         process_file(file)
+        process_file(file)
+    fnc.start_run(log_file)    
     end_time = time.time()
 
     print(f"Number of files containing <cfquery> tags: {len(file_name)}")
@@ -155,3 +159,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+    

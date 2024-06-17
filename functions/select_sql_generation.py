@@ -1,5 +1,7 @@
 import re
 from collections import defaultdict
+import functions as fnc
+
 def extract_where_column_names(sql_query,is_group_by_exit,is_order_by_exit):
     not_order_group = False
     if is_order_by_exit:
@@ -27,6 +29,27 @@ def extract_table_column_names(sql_query):
     column_regex = re.compile(r'(\w+)\.(\w+)')
     simple_column_regex = re.compile(r'\b(\w+)\b')
 
+    # case_when_regex = re.compile(r"CASE\s+(.*?)\s+(?:WHEN.*?(?=CASE|\s+END)|AS\s+\w+|END)", re.IGNORECASE | re.DOTALL)
+    case_when_regex = re.compile(r"CASE\s+(.*?)\s+(?:WHEN.*?(?=CASE|\bEND\b)|AS\s+\w+|END\s+AS\s+\w+|END)", re.IGNORECASE | re.DOTALL)
+    case_when_sql = case_when_regex.findall(sql_query)
+    no_case_when_sql= case_when_regex.sub("", sql_query)
+    built_in_functions_regex = re.compile(r"\b(SOME|COUNT|SUM|AVERAGE|MIN|MAX|ISNULL)\b", re.IGNORECASE)
+
+    # sql_query_res = built_in_functions_regex.sub("", case_when_sql[0])
+    select_columns = []
+ 
+    # if sql_query_res:
+    #     sql_query = no_case_when_sql
+    #     sql_pattern = remove_parentheses(sql_query_res)
+    #     comparison_pattern = re.compile(r'(\b[\w.]+)\s*(=|!=|<>|>|<|>=|<=)\s*([\w.]+)(?:\s*(?:THEN\s*([\w.]+)\s*(=|!=|<>|>|<|>=|<=)\s*([\w.]+)|\s*(?:ELSE\s*([\w.]+)\s*))|$)')
+    #     matches = comparison_pattern.findall(sql_pattern)
+    #     if matches:
+    #         for match in matches[0]:
+    #             is_words = fnc.is_word(match)
+
+    #             if is_words and match != '':
+    #                 select_columns.append(match)
+
     # Extract table aliases
     tables = table_alias_regex.findall(sql_query)
     if tables:
@@ -44,14 +67,20 @@ def extract_table_column_names(sql_query):
     select_clause = select_clause_regex.findall(sql_query)
     if select_clause:
         if column_regex.findall(select_clause[0]):
-            select_columns = column_regex.findall(select_clause[0])
+            select_columns1 = column_regex.findall(select_clause[0])
         else:
-            select_columns = simple_column_regex.findall(select_clause[0])
-            select_columns = [(list(table_dict.keys())[0], column) for column in select_columns]
-        for alias, column in select_columns:
+            select_columns1 = simple_column_regex.findall(select_clause[0])
+            select_columns1 = [(list(table_dict.keys())[0], column) for column in select_columns1]
+        
+        # select_columns1[0] += tuple(select_columns)
+        # print(select_columns1[0])
+        # exit()
+ 
+        for alias, column in select_columns1:
             if alias in table_dict:
                 table_name = table_dict[alias]
                 column_map[table_name]['select'].append(column)          
+
 
     # Extract WHERE clause columns
     asc_desc_regex =  re.compile(r"(?i)\bASC\b|\bDESC\b", re.IGNORECASE | re.DOTALL)
@@ -64,8 +93,7 @@ def extract_table_column_names(sql_query):
     columns_with_where = []
 
     where_columns = extract_where_column_names(sql_query,order_by_clause,group_by_clause)
-    # pattern = re.compile(r'(\w+)\.(\w+)')
-    # columns_with_where = pattern.findall(result)
+
     pattern = re.compile(r'\b(\w+)\s*=')
     columns_with_where = pattern.findall(where_columns)
     columns = [(list(table_dict.keys())[0], column) for column in columns_with_where]
@@ -172,12 +200,10 @@ def extract_table_column_names_with_join(sql_query):
 def ensure_unique_values(data_dict):
     for table, columns in data_dict.items():
         for key, values in columns.items():
-            # Convert list to a set to remove duplicates, then back to a list
-            unique_values = list(set(values))
-            # Maintain original order while keeping unique values
             seen = set()
             unique_ordered_values = [x for x in values if not (x in seen or seen.add(x))]
             data_dict[table][key] = unique_ordered_values
+
     return data_dict
 
 def combine_data_list(data_list):
@@ -195,14 +221,18 @@ def combine_data_list(data_list):
             for key, value in columns_info.items():
                 combined_data[key_name][key].extend(value)
 
-    # Convert 'where' and 'order' lists to unique values
     combined_data[key_name]['where'] = list(set(combined_data[key_name]['where']))
     combined_data[key_name]['order'] = list(set(combined_data[key_name]['order']))
     column_map = ensure_unique_values(combined_data)
     return column_map
 
+def remove_parentheses(content):
+    parentheses_pattern = re.compile(r'[\(\)]')
+    while parentheses_pattern.search(content):
+        content = parentheses_pattern.sub('', content)
+    return content
+
 def extract_select_query(sql_query):
-    # select_pattern = re.compile(r"SELECT\s.*?FROM\s.*?(?=SELECT|$)", re.IGNORECASE | re.DOTALL)
     select_pattern = re.compile(r"SELECT\s.*?FROM\s.*?(?=SELECT|$)", re.IGNORECASE | re.DOTALL)
     select_matches = select_pattern.findall(sql_query)
     return select_matches

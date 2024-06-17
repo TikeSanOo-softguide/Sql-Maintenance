@@ -16,6 +16,12 @@ def has_delete_query(query):
     delete_pattern = r'^\s*DELETE\s+FROM\b'
     return bool(re.match(delete_pattern, query, re.IGNORECASE))
 
+@staticmethod
+def is_word(value):
+    if value is None or value.strip() == "":
+        return True
+    return value.isidentifier()
+
 def validate_sql_pattern(sql_query):
     # Check for exactly one occurrence of SELECT/select (case-insensitive)
     select_pattern = re.compile(r'\bselect\b', re.IGNORECASE)
