@@ -7,10 +7,6 @@ def insert_table_column_names(insert_query):
         # Skip queries with placeholders
         if "#tableName#" in insert_query or "#noColumnName#" in insert_query:
             return None, None
-        # Skip queries necessary
-        if "<cfif LOOPCOUNT EQ 1>" in insert_query:
-            print(insert_query)
-            return None, None
         
         # Extract table name
         table_name_start = insert_query.index("INTO") + len("INTO")

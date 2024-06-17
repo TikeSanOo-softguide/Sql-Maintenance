@@ -12,6 +12,10 @@ def extract_delete_info(delete_query):
     # Remove "AND NOT (" and replace it with "AND ("
     and_not_pattern = r'\s+AND\s+NOT\s*\('
 
+    # Skip queries necessary
+    if "<cfif LOOPCOUNT EQ 1>" in delete_query:
+        return None, None
+
     # Extract table name
     table_match = re.search(table_name_pattern, delete_query, re.IGNORECASE)
     if not table_match:
