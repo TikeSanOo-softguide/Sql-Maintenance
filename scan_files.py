@@ -50,16 +50,25 @@ def remove_all_comments(content):
     # Remove nested comments
     cleaned_nested_content = nested_comment_pattern.sub('', content)
     cleaned_content = comment_pattern.sub('', cleaned_nested_content)
+
     return cleaned_content
 
-def remove_coldfusion_syntax(sql_query):
-    cf_tags_pattern = re.compile(r'<\/?cf[^>]*>', re.IGNORECASE)
-    cf_comments_pattern = re.compile(r'<!---.*?--->', re.DOTALL)
-    cf_expressions_pattern = re.compile(r'#[^#]*#')
-    sql_query = re.sub(cf_tags_pattern, '', sql_query)
-    sql_query = re.sub(cf_comments_pattern, '', sql_query)
-    sql_query = re.sub(cf_expressions_pattern, '', sql_query)
-    return sql_query
+def remove_sql_query_comment(content):
+    # Remove all occurrences of C-style block comments (/* ... */)
+    content = re.sub(re.compile("/\*.*?\*/", re.DOTALL), "", content)
+    # Remove all occurrences of C++-style line comments (// ...)
+    content = re.sub(re.compile("//.*?\n"), "", content)
+    # Remove lines that start with '--'
+    content = re.sub(re.compile("--.*?$", re.MULTILINE), "", content)
+    
+    # Remove ColdFusion tags
+    content = re.sub(re.compile(r'<\/?cf[^>]*>', re.IGNORECASE), '', content)
+    # Remove ColdFusion comments
+    content = re.sub(re.compile(r'<!---.*?--->', re.DOTALL), '', content)
+    # Remove ColdFusion expressions
+    content = re.sub(re.compile(r'#[^#]*#'), '', content)
+    
+    return content
 
 def process_file(file_path):
     try:
@@ -73,6 +82,7 @@ def process_file(file_path):
                 file_name.append(file_path.name)
                 query_analysis_logger.info(file_path)
                 for match in matches:
+                    
                     #Remove <cfquery> tags from query
                     sql_regex = re.compile(r'<cfquery.*?>(.*?)</cfquery>', re.DOTALL)
                     result = sql_regex.search(match)
@@ -83,18 +93,17 @@ def process_file(file_path):
                         is_update = fnc.has_update_query(sql_query)
                         is_delete = fnc.has_delete_query(sql_query)
                         column_map = {}
-                    
+                        
                         if is_select:
-                            cleaned_sql_query = remove_coldfusion_syntax(sql_query)
-                            query_pattern = fnc.validate_sql_pattern(cleaned_sql_query)
+                            process_sql_query = remove_sql_query_comment(sql_query)
+                            query_pattern = fnc.validate_sql_pattern(process_sql_query)
                             if query_pattern == 'simple select':
-                                column_map = fnc.extract_table_column_names(cleaned_sql_query)
+                                column_map = fnc.extract_table_column_names(process_sql_query)
                             elif query_pattern == 'simple join':
-                                column_map = fnc.extract_table_column_names_with_join(cleaned_sql_query)
-                            elif query_pattern == 'subquery from select':
-                                column_map = fnc.extract_table_column_names_with_sub_pat1(cleaned_sql_query)
-                            elif query_pattern == 'subquery where select':
-                                column_map = fnc.extract_table_column_names_with_sub_pat2(cleaned_sql_query)
+                                column_map = fnc.extract_table_column_names(process_sql_query)
+                            elif query_pattern == 'subquery select':
+                                column_map = fnc.extract_table_column_names_with_sub_pat(process_sql_query)
+
                             elif query_pattern == 'Not sql exists':
                                 if len(file_path_list) == 0:
                                     require_logger.info(file_path)
@@ -102,7 +111,7 @@ def process_file(file_path):
 
                                 if file_path not in file_path_list:
                                     file_path_list = []
-                                require_logger.info(cleaned_sql_query + "\n")       
+                                require_logger.info(process_sql_query + "\n")       
                             
                             for table, columns in column_map.items():
                                 if 'join' in columns:
@@ -125,7 +134,8 @@ def process_file(file_path):
                                 query_analysis_logger.info("===================================")
                         if is_update:
                             # Extract table name, set columns, and where columns
-                            table_name, set_columns, where_columns = fnc.update_table_column_names(sql_query)
+                            process_sql_query = remove_sql_query_comment(sql_query)
+                            table_name, set_columns, where_columns = fnc.update_table_column_names(process_sql_query)
                             if table_name and set_columns and where_columns:
                                 # Log table name, set columns, and where columns
                                 query_analysis_logger.info("Update Table Name: %s", table_name)
@@ -150,7 +160,7 @@ def main():
     files = [file for file in rootDir.rglob('*') if file.is_file()]
     for file in files:
         process_file(file)
-    fnc.start_run(log_file)    
+    fnc.start_run(log_file)
     end_time = time.time()
 
     print(f"Number of files containing <cfquery> tags: {len(file_name)}")

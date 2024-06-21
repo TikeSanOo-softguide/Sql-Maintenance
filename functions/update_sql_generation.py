@@ -7,7 +7,7 @@ def update_table_column_names(update_query):
     set_columns_pattern = r'SET\s+(.*?)(?:\s+WHERE|$)'
     where_columns_pattern = r'WHERE\s+(.*)$'
     # Regular expression to find <cfif ...> ... </cfif>
-    cfif_pattern = re.compile(r"(<cfif[^>]*>.*?</cfif>|<cfqueryparam[^>]*>)", re.DOTALL)
+    # cfif_pattern = re.compile(r"(<cfif[^>]*>.*?</cfif>|<cfqueryparam[^>]*>)", re.DOTALL)
     # Regular expression to split by "=", "IN", or "NOT IN"
     split_pattern = r'\s*(=|IN|NOT EXISTS)\s*'
     # Regular expression pattern to capture the left side of '='
@@ -24,9 +24,9 @@ def update_table_column_names(update_query):
     if not set_columns_match:
         return table_name, None, None
     set_columns_str = set_columns_match.group(1)
-    columns_name = cfif_pattern.sub('', set_columns_str)
+    # columns_name = cfif_pattern.sub('', set_columns_str)
     # Find all matches in the string
-    set_columns = pattern.findall(columns_name)
+    set_columns = pattern.findall(set_columns_str)
 
     # Extract where columns
     where_columns_match = re.search(where_columns_pattern, update_query, re.IGNORECASE | re.DOTALL)

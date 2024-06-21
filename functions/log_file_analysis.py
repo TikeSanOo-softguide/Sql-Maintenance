@@ -1,7 +1,5 @@
 import re
 import os
-import time
-from datetime import datetime
 import logging
 import configparser
 from collections import defaultdict
@@ -10,9 +8,9 @@ from pathlib import Path
 config = configparser.ConfigParser()
 config.read('config.ini', encoding='utf-8')
 rootDir = Path(config['DEFAULT']['logFiledir'])
-rootDir2 = Path(config['DEFAULT']['logFiledir2'])
+rootDir2 = Path(config['DEFAULT']['table_list_file_dir'])
 
-folder_path = "logs2"
+folder_path = "table_list"
 
 # Open the log file
 
@@ -23,16 +21,16 @@ logDir = Path("logfile")
 logDir.mkdir(exist_ok=True)
 error_log_path = logDir / 'error_log.log'
 
-def setup_logger(table_name):
+def setup_logger(table_folder_path,table_name):
     # Create the directory if it doesn't exist
-    if not os.path.exists(folder_path):
-        os.makedirs(folder_path, exist_ok=True)
+    if not os.path.exists(table_folder_path):
+        os.makedirs(table_folder_path, exist_ok=True)
 
     logger = logging.getLogger(table_name)  # Logger name based on table name
     logger.setLevel(logging.INFO)  # Set logging level to INFO
 
     # Create a file handler for the logger in the specified directory
-    handler = logging.FileHandler(os.path.join(folder_path, f"{table_name}.txt"))
+    handler = logging.FileHandler(os.path.join(table_folder_path, f"{table_name}.txt"))
     handler.setLevel(logging.INFO)  # Set handler level to INFO
 
     # Create a formatter and set it for the handler
@@ -53,8 +51,8 @@ def extract_table_names(section_content):
     section_content = section_content.replace("Group Columns:", "Select Columns:")
     
     section_content = concat_column(section_content)
-    select_table_name_pattern = re.compile(r'Select Table Name:\s*(.*)')
-    select_column_name_pattern = re.compile(r'Select Columns:\s*(.*)')
+    select_table_name_pattern = re.compile(r'Select Table Name:\s*(.*)', re.IGNORECASE)
+    select_column_name_pattern = re.compile(r'Select Columns:\s*(.*)', re.IGNORECASE)
     
     # pattern = re.compile(r'\b(\w+)\s+AS\s+(\w+)\b(?:,\s*|$)')
     match = select_table_name_pattern.search(section_content)
@@ -65,10 +63,18 @@ def extract_table_names(section_content):
         table_name = match.group(1)
         split_table_name = re.split(r',\s*', table_name)
         for sp_name in split_table_name:
-            table_name_split = re.compile(r'\bAS\s+(\w+)')
+            table_folder_path = folder_path
+            table_name_split = re.compile(r'\bAS\s+(\w+)', re.IGNORECASE)
             output_table = table_name_split.sub('', sp_name)
             write_table_name = output_table.strip()
-            logger = setup_logger(write_table_name)
+            split_strings = write_table_name.split('.')
+            if len(split_strings) == 2:
+                write_table_name = split_strings[1]
+                db_folder_path = os.path.join(folder_path, split_strings[0])
+                table_folder_path = db_folder_path
+                if not os.path.exists(db_folder_path):
+                    os.makedirs(db_folder_path, exist_ok=True)             
+            logger = setup_logger(table_folder_path,write_table_name)
 
     if match_column:
         split_name = ''
@@ -107,12 +113,12 @@ def concat_column(input_string):
     return final_result
 
 def extract_column_names(sp_name, split_table_name):
-        column_name_split = re.compile(r'(\w+)\.(\w+)')
-        col_matches = column_name_split.findall(sp_name)        
+        column_name_split = re.compile(r'(\w+)\.(\w+)', re.IGNORECASE)
+        col_matches = column_name_split.findall(sp_name)     
         if col_matches:
             col_alias = col_matches[0][0] 
             col_name = col_matches[0][1] 
-            pattern = re.compile(r'\b(\w+)\s+AS\s+(\w+)\b')
+            pattern = re.compile(r'\b(\w+)\s+AS\s+(\w+)\b', re.IGNORECASE)
             for table_name in split_table_name:    
                 output_table = pattern.findall(table_name)
                 for table_name, table_alias in output_table:
@@ -127,6 +133,7 @@ def extract_column_names(sp_name, split_table_name):
 def start_run(file_path):
     try:
         file_path = Path(file_path)
+        exiting_data2 = []
         with file_path.open('r', encoding='utf-8') as file:
             file_name.append(file_path.name)
             # Read each line in the file
@@ -147,20 +154,25 @@ def start_run(file_path):
                         with file_path.open('a', encoding='utf-8') as file:
                             for col in value:
                                 exiting_data = read_file_to_array(file_path)
-                                if col not in exiting_data:
-                                    col = col.replace("'", "")
-                                    col = col.replace("[", "")
-                                    col = col.replace("]", "")
+                                col = col.replace("'", "")
+                                col = col.replace("[", "")
+                                col = col.replace("]", "")
+                                if col not in exiting_data :
+                                    # and col not in exiting_data2
+                                    exiting_data2.append(col)
                                     file.write(col + '\n') 
     except UnicodeDecodeError:
         with error_log_path.open('a', encoding='utf-8') as error_log:
             error_log.write(f'File: {file_path} - Unable to decode with utf-8\n')
-
-def read_file_to_array(filepath):
+            
+def read_file_to_array(file_path):
+    if not os.path.isfile(file_path):
+        raise FileNotFoundError(f"File not found at: {file_path}")
+    
     lines = []
-    with filepath.open('r', encoding='utf-8') as file:
+    with open(file_path, 'r', encoding='utf-8') as file:  
         for line in file:
             stripped_line = line.strip()
             lines.append(stripped_line)
-
+       
     return lines
