@@ -62,29 +62,36 @@ def extract_table_names(section_content):
     if match:
         table_name = match.group(1)
         split_table_name = re.split(r',\s*', table_name)
+
         for sp_name in split_table_name:
             table_folder_path = folder_path
             table_name_split = re.compile(r'\bAS\s+(\w+)', re.IGNORECASE)
             output_table = table_name_split.sub('', sp_name)
             write_table_name = output_table.strip()
             split_strings = write_table_name.split('.')
+            
             if len(split_strings) == 2:
-                write_table_name = split_strings[1]
+                write_table_name = split_strings[-1]
                 db_folder_path = os.path.join(folder_path, split_strings[0])
                 table_folder_path = db_folder_path
+            if len(split_strings) == 3:
+                write_table_name = split_strings[-1]
+                db_folder_path = os.path.join(folder_path, split_strings[0], split_strings[1])
+                table_folder_path = db_folder_path
                 if not os.path.exists(db_folder_path):
-                    os.makedirs(db_folder_path, exist_ok=True)             
-            logger = setup_logger(table_folder_path,write_table_name)
-
+                    os.makedirs(db_folder_path, exist_ok=True)
+            if write_table_name != '':                 
+                logger = setup_logger(table_folder_path,write_table_name)
+    
     if match_column:
         split_name = ''
         column_name = match_column.group(1)
         if ',' in column_name:
             split_name = re.split(r',\s*', column_name)
-            for sp_name in split_name: 
+            for sp_name in split_name:
                 extract_column_names(sp_name, split_table_name)     
         else:
-            extract_column_names(split_name, split_table_name)
+            extract_column_names(column_name, split_table_name)
                              
     return column_map
 
@@ -113,27 +120,37 @@ def concat_column(input_string):
     return final_result
 
 def extract_column_names(sp_name, split_table_name):
-        column_name_split = re.compile(r'(\w+)\.(\w+)', re.IGNORECASE)
-        col_matches = column_name_split.findall(sp_name)     
-        if col_matches:
-            col_alias = col_matches[0][0] 
-            col_name = col_matches[0][1] 
-            pattern = re.compile(r'\b(\w+)\s+AS\s+(\w+)\b', re.IGNORECASE)
-            for table_name in split_table_name:    
-                output_table = pattern.findall(table_name)
+    column_name_split = re.compile(r'(\w+)\.(\w+)', re.IGNORECASE)
+    col_matches = column_name_split.findall(sp_name)     
+    if col_matches:
+        col_alias = col_matches[0][0] 
+        col_name = col_matches[0][1] 
+        table_pattern = re.compile(r'\b(\w+)\s+AS\s+(\w+)\b', re.IGNORECASE)
+        for table_name in split_table_name:    
+            output_table = table_pattern.findall(table_name)
+            if output_table:
                 for table_name, table_alias in output_table:
                     if col_alias == table_alias and col_name not in column_map[table_name]:
                         column_map[table_name].append(col_name)
-        else:
-            for table_name in split_table_name:
-                if sp_name not in column_map[table_name]:
-                    column_map[table_name].append(sp_name)  
+            if not output_table:
+                    output_table = [tuple(table_name.strip().split(' '))]
+                    if len(output_table) == 2 :
+                        for table_name, table_alias in output_table:
+                            if col_alias == table_alias and col_name not in column_map[table_name]:
+                                column_map[table_name].append(col_name)
+                    else:            
+                        if col_alias == table_name and col_name not in column_map[table_name]:
+                            column_map[table_name].append(col_name)
+            
+    else:
+        for table_name in split_table_name:
+            if sp_name not in column_map[table_name]:
+                column_map[table_name].append(sp_name)  
 
 
 def start_run(file_path):
     try:
         file_path = Path(file_path)
-        exiting_data2 = []
         with file_path.open('r', encoding='utf-8') as file:
             file_name.append(file_path.name)
             # Read each line in the file
@@ -145,20 +162,24 @@ def start_run(file_path):
             for section in sections:
                 section_content = section.strip()
                 if section_content:  # Ensure the section is not empty
-                    column_map = extract_table_names(section_content) 
-            for key,value in column_map.items():
+                    column_map = extract_table_names(section_content)
+                           
+            for key,value in column_map.items():  
                 target_log = f"{key}.txt"
                 files = [file for file in rootDir2.rglob('*') if file.is_file()]
                 for file_path in files:
                     if file_path.name == target_log:
+                        exiting_data2 = []
                         with file_path.open('a', encoding='utf-8') as file:
                             for col in value:
                                 exiting_data = read_file_to_array(file_path)
                                 col = col.replace("'", "")
                                 col = col.replace("[", "")
                                 col = col.replace("]", "")
-                                if col not in exiting_data :
-                                    # and col not in exiting_data2
+                                col = col.replace("{", "")
+                                col = col.replace("}", "")
+                                
+                                if col not in exiting_data and col not in exiting_data2:
                                     exiting_data2.append(col)
                                     file.write(col + '\n') 
     except UnicodeDecodeError:

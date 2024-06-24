@@ -16,15 +16,22 @@ def has_delete_query(query):
     delete_pattern = r'^\s*DELETE\s+FROM\b'
     return bool(re.match(delete_pattern, query, re.IGNORECASE))
 
+
 def is_table_name_present(query):
-    # Regex to find the table name after the FROM clause
-    pattern = r"\bFROM\s+([a-zA-Z_][\w]*)\b"
-    match = re.search(pattern, query, re.IGNORECASE)
-    
-    if match:
-        return True
-    
+    table_search = r'\bFROM\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*(?:AS\s+([a-zA-Z_][a-zA-Z0-9_]*))?'
+    from_table = re.search(table_search, query, re.IGNORECASE)
+    if from_table:
+        table_name = from_table.group(1)
+        
+        if table_name.upper() == 'AS' or table_name.upper() == 'WHERE':
+            return False
+        else:
+            return True
     return False
+
+def is_valid_join_table_name(word):
+    table_name_pattern = re.compile(r"^[a-zA-Z_][\w]*$")
+    return bool(table_name_pattern.match(word))
 
 def validate_sql_pattern(query):
     # Check for exactly one occurrence of SELECT/select (case-insensitive)

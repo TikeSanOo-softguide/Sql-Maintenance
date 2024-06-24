@@ -55,7 +55,7 @@ def remove_all_comments(content):
 
 def remove_sql_query_comment(content):
     # Remove all occurrences of C-style block comments (/* ... */)
-    content = re.sub(re.compile("/\*.*?\*/", re.DOTALL), "", content)
+    content = re.sub(r'/\*.*?\*/', '', content, flags=re.DOTALL)
     # Remove all occurrences of C++-style line comments (// ...)
     content = re.sub(re.compile("//.*?\n"), "", content)
     # Remove lines that start with '--'
@@ -82,7 +82,6 @@ def process_file(file_path):
                 file_name.append(file_path.name)
                 query_analysis_logger.info(file_path)
                 for match in matches:
-                    
                     #Remove <cfquery> tags from query
                     sql_regex = re.compile(r'<cfquery.*?>(.*?)</cfquery>', re.DOTALL)
                     result = sql_regex.search(match)
