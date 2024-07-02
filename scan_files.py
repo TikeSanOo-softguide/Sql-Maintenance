@@ -12,6 +12,7 @@ folder_path = "logs"
 if not os.path.exists(folder_path):
     os.makedirs(folder_path)
 
+table_folder_path = "table_list"
 today_date = datetime.today().strftime('%Y_%m_%d_%H_%M_%S')
 # Set up logging
 log_file = os.path.join(folder_path, f"query_analysis_{today_date}.log")
@@ -34,6 +35,7 @@ require_logger.addHandler(require_handler)
 config = configparser.ConfigParser()
 config.read('config.ini', encoding='utf-8')
 rootDir = Path(config['DEFAULT']['rootDir'])
+rootDir2 = Path(config['DEFAULT']['table_list_file_dir'])
 
 logDir = Path("logfile")
 cfquery_pattern = re.compile(r'<cfquery\b.*?</cfquery>', re.DOTALL | re.IGNORECASE)
@@ -159,7 +161,7 @@ def main():
     files = [file for file in rootDir.rglob('*') if file.is_file()]
     for file in files:
         process_file(file)
-    fnc.start_run(log_file)
+    fnc.start_run(log_file, rootDir2, table_folder_path)
     end_time = time.time()
 
     print(f"Number of files containing <cfquery> tags: {len(file_name)}")

@@ -19,11 +19,13 @@ def has_delete_query(query):
 
 def is_table_name_present(query):
     table_search = r'\bFROM\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*(?:AS\s+([a-zA-Z_][a-zA-Z0-9_]*))?'
+    join_table_name_regex = r'(JOIN)\s+(.+?)\s+(ON|$)'
     from_table = re.search(table_search, query, re.IGNORECASE)
+    join_table = re.findall(join_table_name_regex, query, re.IGNORECASE) 
+   
     if from_table:
         table_name = from_table.group(1)
-        
-        if table_name.upper() == 'AS' or table_name.upper() == 'WHERE':
+        if table_name.upper() == 'AS' or table_name.upper() == 'WHERE' or len(table_name) == 1 and len(join_table) == 0:
             return False
         else:
             return True

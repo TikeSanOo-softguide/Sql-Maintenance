@@ -2,9 +2,22 @@ import re
 from collections import defaultdict
 import functions as fnc
 import sqlparse
-from sqlparse.sql import IdentifierList,Case, Identifier, Parenthesis, Token
+from sqlparse.sql import IdentifierList, Identifier
 from sqlparse.tokens import Keyword, DML, Punctuation,Wildcard
 
+built_in_functions_regex = re.compile(
+    r"LEFT",
+    re.IGNORECASE
+)
+# built_in_functions_regex2 = re.compile( r"\b(SOME\(|COUNT\(|SUM|AVERAGE\(|MIN\(|ISNULL|MONTH|DAY|ISNUMERIC|LEFT|LTRIM|SUBSTRING|datetime|STR\(|CONVERT|VARCHAR|TOP\s+\d+)\b|\bTOP\s*\(\s*\d+\s*\)|MAX\(",
+#     re.IGNORECASE
+# )
+built_in_functions_regex2 = re.compile(
+    r"\b(SOME\(|COUNT\(|SUM|AVERAGE\(|MIN\(|ISNULL|MONTH|DAY|LEFT|ISNUMERIC|LTRIM|SUBSTRING|datetime|STR\(|CONVERT|VARCHAR|TOP\s+\d+)\b|\bTOP\s*\(\s*\d+\s*\)|MAX\(",
+    re.IGNORECASE
+)
+
+# built_in_functions_regex = re.compile(r"\b(SOME\(|COUNT\(|SUM|AVERAGE\(|MIN\(|MAX\(|ISNULL|MONTH|DAY|ISNUMERIC|LEFT|LTRIM|STR\(|\bTOP\s+\d+\b|\bTOP\s+\(\d+\)|CONVERT|varchar)\b", re.IGNORECASE)
 subqueries = []
 # Function to recursively extract and print CASE statements
 def extract_case_statements(token_list):
@@ -13,17 +26,16 @@ def extract_case_statements(token_list):
         if isinstance(token, sqlparse.sql.Case):
             case_statements.append(token.value.strip())
         elif isinstance(token, sqlparse.sql.TokenList):
-            case_statements.extend(extract_case_statements(token))
+            case_statements.extend(extract_case_statements(token.tokens))
         elif isinstance(token, sqlparse.sql.IdentifierList):
             for identifier in token.get_identifiers():
-                case_statements.extend(extract_case_statements(identifier))
+                case_statements.extend(extract_case_statements(identifier.tokens))
         elif isinstance(token, sqlparse.sql.Identifier):
             case_statements.extend(extract_case_statements(token.tokens))
         elif isinstance(token, sqlparse.sql.Function):
             case_statements.extend(extract_case_statements(token.tokens))
-            
     return case_statements
-        
+
 def remove_case_statements(token_list):
     new_query_parts = []
     for token in token_list:
@@ -38,10 +50,11 @@ def remove_case_statements(token_list):
 def case_when_pattern_analysis(case_statements):
     columns = []
     column_pattern = r'\b(?:[a-zA-Z_][a-zA-Z0-9_]*|[ぁ-んァ-ヶ亜-熙訁-鿋０-９ー]+)\.(?:[a-zA-Z_][a-zA-Z0-9_]*|[ぁ-んァ-ヶ亜-熙訁-鿋０-９ー]+)\b'
-    built_in_functions_regex = re.compile(r"\b(SOME\(|COUNT\(|SUM|AVERAGE\(|MIN\(|MAX\(|ISNULL|MONTH|DAY|ISNUMERIC|LEFT|LTRIM|STR\(|TOP)\b", re.IGNORECASE)
+    # built_in_functions_regex = re.compile(r"\b(SOME\(|COUNT\(|COUNT\(\*\)|SUM|AVERAGE\(|MIN\(|MAX\(|ISNULL|MONTH|DAY|ISNUMERIC|LEFT|LTRIM|STR\(|TOP)\b", re.IGNORECASE)
     if case_statements:
         for case_statement in case_statements:
             case_statement = built_in_functions_regex.sub("", case_statement)
+            case_statement = built_in_functions_regex2.sub("", case_statement)
             columns = re.findall(column_pattern, case_statement)
 
     return columns
@@ -100,6 +113,7 @@ def anlaysis_select_clause_column_conditions(col):
     col = remove_parentheses(col)
     column = re.sub(r"'([^']*)'", r"\1", col)
     column = re.sub(r'\s+AS\s+\w+', '', column, flags=re.IGNORECASE).strip()
+    column = re.sub(r'^As\s\w+$', '', column, flags=re.IGNORECASE).strip()
     column = re.sub(r"\s+AS\s+[a-zA-Z_]\w*", "", column, flags=re.IGNORECASE)
     # column = re.sub(r'[-+*/\d]', '', column, flags=re.IGNORECASE)
     column = re.sub(r'[-+*/]\s*\d+(\.\d+)?', '', column)
@@ -131,47 +145,91 @@ def contains_select_all(query):
 def extract_table_and_alias(query):
     # table_name_regex = re.compile(r'FROM\s+([\w.]+)\s+(?:AS\s+(\w+))?', re.IGNORECASE)
     # table_name_regex = re.compile(r'\bFROM\s+([\w.]+)\s+(?:AS\s+(\w+))?', re.IGNORECASE)
-    table_name_regex = re.compile(r'\bFROM\s+((?:[\w.]+\s*(?:AS\s+\w+)?\s*,\s*)*[\w.]+\s*(?:AS\s+\w+)?)', re.IGNORECASE)
+    table_name_regex = re.compile(r'\bFROM\s+((?:[\w.]+\s*(?:AS\s+\w+)?\s*,\s*)*[\w.]+\s*(?:AS\s*\w+)?)', re.IGNORECASE)
 
     match = table_name_regex.search(query)
     tables = []
     if match:
         table_names_part = match.group(1)
+
         # Split table names by comma and strip extra whitespace
         for table_def in table_names_part.split(','):
-            table_def = table_def.strip()
+            table_def = ' '.join(table_def.strip().split())
             tables.append(table_def)
-
+    
     output = ",".join(tables)
     
     return output
 
+# def extract_join(sql_query):
+#     parsed = sqlparse.parse(sql_query)[0]
+
+# # Initialize variables to store JOIN details
+#     join_type = None
+#     tables_involved = []
+#     on_conditions = []
+
+#     # Iterate through parsed tokens
+#     for token in parsed.tokens:
+#         if isinstance(token, sqlparse.sql.Where):
+#             # Stop processing after WHERE clause
+#             break
+#         elif isinstance(token, sqlparse.sql.IdentifierList):
+#             # Check for JOIN keywords and process
+#             for identifier in token.get_identifiers():
+#                 if identifier.value.upper() in ['JOIN', 'LEFT JOIN', 'RIGHT JOIN', 'INNER JOIN', 'FULL OUTER JOIN', 'FULL JOIN']:
+#                     join_type = identifier.value.upper()
+#                 elif join_type and isinstance(identifier, sqlparse.sql.Identifier):
+#                     # Assuming next token is table name after JOIN keyword
+#                     tables_involved.append(identifier.value.strip())
+#                 elif join_type and isinstance(identifier, sqlparse.sql.Comparison):
+#                     # Assuming ON condition follows table name
+#                     on_conditions.append(identifier.value.strip())
+
+#     # Print extracted JOIN details
+#     print(f"Join Type: {join_type}")
+#     print(f"Tables Involved: {', '.join(tables_involved)}")
+#     print(f"ON Conditions: {' AND '.join(on_conditions)}")
+
 def extract_table_column_names(sql_query):
+    distinct_regex = re.compile(r'\bDISTINCT\b', re.IGNORECASE)
+    sql_query = distinct_regex.sub('', sql_query)
+
     parsed_query = sqlparse.parse(sql_query)[0]
     new_tokens = remove_case_statements(parsed_query.tokens)
     sql_query = ''.join(str(token) for token in new_tokens)
-    
+
     case_statements = extract_case_statements(parsed_query)
     columns = case_when_pattern_analysis(case_statements)
     sql_query = remove_row_number_segment(sql_query)
     join_table_name_regex = re.compile(r'(JOIN)\s+(.+?)\s+(ON|$)', re.IGNORECASE)
     
     select_table_name = extract_table_and_alias(sql_query)
-    built_in_functions_regex = re.compile(r"\b(SOME\(|COUNT\(|SUM|AVERAGE\(|MIN\(|MAX\(|ISNULL|MONTH|DAY|ISNUMERIC|LEFT|LTRIM|STR\(|TOP|CONVERT|varchar)\b", re.IGNORECASE)
+    # built_in_functions_regex = re.compile(r"\b(SOME\(|COUNT\(|COUNT\(\*\)|SUM|AVERAGE\(|MIN\(|MAX\(|ISNULL|MONTH|DAY|ISNUMERIC|LEFT|LTRIM|STR\(|\bTOP\s+\d+\b|CONVERT|varchar)\b", re.IGNORECASE)
 
     join_table_names = join_table_name_regex.findall(sql_query)
-    column_list = []
-    
     column_map = defaultdict(lambda: {'select': [], 'where': [], 'join': [], 'order': [], 'group': []})
+    if join_table_names:
+        if select_table_name.upper().startswith("AS"):
+            table_names = [table_tuple.split()[0] for _, table_tuple, _ in join_table_names]
+            select_table_name = ''
+            select_table_name = ','.join(table_names)
+            
+        for table_name in join_table_names:
+            column_map[select_table_name]['join'].append(table_name[1])
+                    
+    column_list = []
 
     if select_table_name:
         for col in columns:
             no_built_in_col = built_in_functions_regex.sub("", col)
+            no_built_in_col = built_in_functions_regex2.sub("", col)
             if no_built_in_col:
                 col = no_built_in_col
             column = anlaysis_select_clause_column_conditions(col)
             column_map[select_table_name]['select'].append(column)
-            
+
+        select_clause_regex = re.compile(r'SELECT\s+(.*?)\s+FROM', re.IGNORECASE | re.DOTALL)    
         select_clause_regex = re.compile(r'SELECT\s+(.*?)\s+FROM', re.IGNORECASE | re.DOTALL)
         select_clause = select_clause_regex.findall(sql_query)
         if select_clause:
@@ -180,28 +238,40 @@ def extract_table_column_names(sql_query):
             if select_column:
                 for col_match in select_column:
                     no_built_in_col = built_in_functions_regex.sub("", col_match)
+                    no_built_in_col = built_in_functions_regex2.sub("", col_match)
                     if no_built_in_col:
                        col_match = no_built_in_col
                        
                     column = anlaysis_select_clause_column_conditions(col_match)
                     column_map[select_table_name]['select'].append(column)   
-
-    if join_table_names:
-       for table_name in join_table_names:
-           column_map[select_table_name]['join'].append(table_name[1])
-
-    join_column_regex = re.compile(r'ON\s*\((.*?)\)', re.IGNORECASE | re.DOTALL)
+    # extract_join(sql_query)
+    # join_column_regex = re.compile(r'ON\s*\((.*?)\)', re.IGNORECASE | re.DOTALL)
+    join_column_regex = re.compile(r'(?:LEFT\s+OUTER|INNER|RIGHT|FULL\s+OUTER)?\s+JOIN\s+([^()]+)(?:\((.*?)\))?\s+ON\s+(.+?)(?=\s+(?:LEFT\s+OUTER|INNER|RIGHT|FULL\s+OUTER)?\s+JOIN|\s+WHERE|\s+GROUP BY|ORDER BY|\s*$)', re.IGNORECASE | re.DOTALL)
+    # join_column_regex4 = re.split(r'\b(?:LEFT\s+OUTER\s+)?JOIN\b', sql_query, flags=re.IGNORECASE)
+    # join_column_regex = re.compile(r'ON\s+([^=]+=[^=]+(?:\s+AND\s+[^=]+=[^=]+)*)', re.IGNORECASE)
+    # join_column_regex = re.compile(r'\bON\b\s+(.+?)\s+(?:LEFT\s+OUTER\s+)?JOIN', re.IGNORECASE | re.DOTALL)
+    # join_column_regex = re.compile(r'(?<!WHERE)\s+ON\s+([^\)]+)\s+(?=(?:LEFT\s+OUTER\s+)?JOIN|\s+WHERE|$)', re.IGNORECASE | re.DOTALL)
+    # join_column_regex = re.compile(r'LEFT\s+OUTER\s+JOIN\s+(.*?)\s+AS\s+(.*?)\s+ON\s+(.*?)$', re.IGNORECASE | re.DOTALL | re.MULTILINE)
+    # join_column_regex = re.compile(r'ON\s*(\((.*?)\)|[^()]+)', re.IGNORECASE | re.DOTALL)
+    # join_column_regex = re.compile(r'ON\s+([a-zA-Z0-9_\.]+)\s*=\s*(REPLACE\(\s*([a-zA-Z0-9_\.]+),.*?\)|[a-zA-Z0-9_\.]+)', re.IGNORECASE | re.DOTALL)
     join_clauses = join_column_regex.findall(sql_query)
 
     if len(join_clauses) > 0:
+        # print(join_clauses)
         # join_condition_regex = re.compile(r'ON\s+([^\s].*?)(?=\s*(?:JOIN|WHERE|GROUP BY|ORDER BY|$))', re.IGNORECASE | re.DOTALL)
-        join_condition_regex = re.compile(r'\bJOIN\b.*?\bON\s*\(.*?\)', re.IGNORECASE | re.DOTALL)
-        join_clauses = join_condition_regex.findall(sql_query)
-        
+        # join_condition_regex = re.compile(r'\bJOIN\b.*?\bON\s*\(.*?\)', re.IGNORECASE | re.DOTALL)
+        # join_column_regex = re.compile(r'ON\s+([^=]+=[^=]+(?:\s+AND\s+[^=]+=[^=]+)*)', re.IGNORECASE)
+        # join_clauses = join_condition_regex.findall(sql_query)
+        # if join_clauses.group(2).startswith("REPLACE"):
+        #     col2 = join_clauses.group(3).strip()  # Extracted from within REPLACE
+        # else:
+        #     col2 = join_clauses.group(2).strip()
+            
         for join_clause in join_clauses:
+            for join in join_clause:
                 pattern = re.compile(r'(\b[\w\.]+)\s*=\s*([\w\.]+\b)')
-                matches = pattern.findall(join_clause)
-                
+                matches = pattern.findall(join)
+
                 for match in matches:
                     if match[0] not in column_list:
                         column_map[select_table_name]['select'].append(match[0])
@@ -218,15 +288,36 @@ def extract_table_column_names(sql_query):
     group_by_clauses = group_by_regex.findall(sql_query)
 
     result = extract_where_column_names(sql_query,order_by_clauses,group_by_clauses)
-    where_regex = re.compile(r'(\b[\w\.]+)\s*(?=\s*=\s*|<>|!=|>=|<=|>|<|!<|!>|\+=|-=|\*=|/=|%=|&=|\^=|\|=)')
+
+    where_regex = re.compile(r'([\w\.]+)\s*(?:=|<>|!=|>=|<=|>|<)\s*([^=]+(?:\n\s*.*)*)')
+    # where_regex = re.compile(r'(\b[\w\.]+)\s*(?=\s*=\s*|<>|!=|>=|<=|>|<|!<|!>|\+=|-=|\*=|/=|%=|&=|\^=|\|=)')
     between_regex = re.compile(r"(.*?)\s+BETWEEN\s+(.*?)\s+AND\s+(.*)")
     
     columns_with_between = between_regex.findall(result)
     no_between_sql = between_regex.sub('',result)
-    columns_with_where = where_regex.findall(no_between_sql)
+    columns_with_where = []
+    split_where_columns = no_between_sql.upper().split('AND')
+    column_name_regex = re.compile(r'([\w\.]+)\s*=\s*([^=]+(?:\n\s*.*)*)')
+    # print(split_where_columns)
+    for where_column in split_where_columns:
+        no_built_in_col = built_in_functions_regex2.sub("", where_column)
+        cols = where_regex.findall(where_column.strip())
+        if cols:
+            for col in cols[0]:
+                # print(col)
+                columns_with_where.append(col.strip())
+#         else:
+#             column_name_regex = re.compile(r'([\w\.]+)\s*=\s*')
+
+# # Find all matches using the regex pattern
+#             matches = column_name_regex.findall(no_built_in_col)
+#             print(matches)        
+        
+    # print(columns_with_where)
+
     split_between_regex = re.compile(r"\b(\w+\.\w+)\b")
 
-# Extracting the matching parts
+    # Extracting the matching parts
     extracted_data = []
     for col in columns_with_between:
         matches = split_between_regex.findall(col[0])
@@ -280,14 +371,14 @@ def ensure_unique_values(data_dict):
                         value = value.replace("=", '')
                         value = value.replace("'", "")
                         value = value.replace("AND", "")
-                        if value and not value.isdigit() and value.strip() and value != "''" and value != "':'" and value != ":" and value != '*' and value != 'as' and value not in seen:
+                        if value and not value.lower() == "count*"  and not value.isdigit() and value.strip() and value != "''" and value != "':'" and value != ":" and value != '*' and value != 'as' and value not in seen:
                             seen.add(value)
                             unique_ordered_values.append(value)
                 else:
                     value = value.replace("=", "")
                     value = value.replace("'", "")
                     value = value.replace("AND", "")
-                    if value and not value.isdigit() and value.strip() and value != "''" and value != '*' and value != "':'" and value != ":" and value != 'as'  and value not in seen:
+                    if value and not value.lower() == "count*"  and not value.isdigit() and value.strip() and value != "''" and value != "':'" and value != ":" and value != '*' and value != 'as' and value not in seen:
                         seen.add(value) 
                         unique_ordered_values.append(value)          
             data_dict[table][key] = unique_ordered_values
@@ -385,6 +476,60 @@ def generate_sql_fragments(sql):
             sql = sql.replace(subquery_str, '')
     return sql_fragments
 
+import re
+
+def generate_sql_fragments1(sql):
+    # Function to extract nested subqueries (not implemented here)
+    nested_subqueries = extract_nested_subqueries(sql)
+    
+    # Regular expression to match 'SELECT' keyword
+    select_regex = re.compile(r'\bselect\b', re.IGNORECASE)
+    
+    # Append the main SQL query to the nested subqueries list
+    nested_subqueries.append(sql)
+    
+    sql_fragments = []
+    
+    # Iterate through each subquery (including the main SQL query)
+    for subquery in nested_subqueries:
+        subquery_str = str(subquery).strip()
+        
+        # Count occurrences of 'SELECT' in the subquery
+        select_matches = select_regex.findall(subquery_str)
+        
+        # If there is not exactly one 'SELECT', handle the subquery
+        if len(select_matches) != 1:
+            # Assuming remove_nested_subqueries is properly defined elsewhere
+            subquery_str = remove_nested_subqueries(nested_subqueries, subquery_str)
+        
+        # Add unique subquery to sql_fragments list
+        if subquery_str not in sql_fragments:
+            sql_fragments.append(subquery_str)
+            # Remove subquery from main SQL string to avoid duplication
+            sql = sql.replace(subquery_str, '')
+    
+    # Return list of unique SQL fragments
+    return sql_fragments
+
+
+def generate_sql_fragments(sql):
+    nested_subqueries = extract_nested_subqueries(sql)
+    select_regex = re.compile(r'\bselect\b', re.IGNORECASE)
+    nested_subqueries.append(sql)
+    sql_fragments = []
+    
+    for subquery in nested_subqueries:
+        subquery_str = str(subquery).strip()    
+        select_matches = select_regex.findall(subquery_str)
+
+        if len(select_matches) != 1:     
+            subquery_str = remove_nested_subqueries(nested_subqueries,subquery_str)  
+
+        if subquery_str not in sql_fragments:
+            sql_fragments.append(subquery_str)
+            sql = sql.replace(subquery_str, '')
+    return sql_fragments
+
 def remove_invalid_joins(query):
     join_patterns = [
         # LEFT JOIN
@@ -419,16 +564,15 @@ def validate_and_keep(match):
 def extract_table_column_names_with_sub_pat(sql_query):
     column_map = {}
     temp_column_map = []
-    sql_fragments  = generate_sql_fragments(sql_query)
+
+    sql_fragments  = generate_sql_fragments1(sql_query)
 
     if sql_fragments:       
-        for subquery in sql_fragments:  
-            is_exists_table_name = fnc.is_table_name_present(subquery)
-
-            if is_exists_table_name:
+        for subquery in sql_fragments:
+            if fnc.is_table_name_present(subquery):
                 no_invaild_join_query = remove_invalid_joins(subquery)
                 column_map1 = extract_table_column_names(no_invaild_join_query)
-                temp_column_map.append(column_map1)  
+                temp_column_map.append(column_map1) 
 
     if temp_column_map:
         temp_column_map.append(column_map)
