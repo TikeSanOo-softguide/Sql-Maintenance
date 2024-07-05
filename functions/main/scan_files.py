@@ -1,19 +1,21 @@
 import os
 import re
 import time
-from datetime import datetime
+import datetime
 import logging
 import configparser
 import functions as fnc
 from pathlib import Path
 
+current_time = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+current_root = Path().resolve()
 # Create a folder if it doesn't exist
 folder_path = "logs"
 if not os.path.exists(folder_path):
     os.makedirs(folder_path)
 
-table_folder_path = "table_list"
-today_date = datetime.today().strftime('%Y_%m_%d_%H_%M_%S')
+today_date = datetime.datetime.now().strftime('%Y_%m_%d_%H_%M_%S')
 # Set up logging
 log_file = os.path.join(folder_path, f"query_analysis_{today_date}.log")
 require_log_file = os.path.join(folder_path, f"require_query_{today_date}.log")
@@ -35,14 +37,18 @@ require_logger.addHandler(require_handler)
 config = configparser.ConfigParser()
 config.read('config.ini', encoding='utf-8')
 rootDir = Path(config['DEFAULT']['rootDir'])
-rootDir2 = Path(config['DEFAULT']['table_list_file_dir'])
+rootTableListDir = current_root / Path(config['DEFAULT']['table_list_file_dir'])
 
-logDir = Path("logfile")
+table_folder_path = Path(config['DEFAULT']['table_list_file_dir'])
+
+
 cfquery_pattern = re.compile(r'<cfquery\b.*?</cfquery>', re.DOTALL | re.IGNORECASE)
 file_name = []
 
-logDir.mkdir(exist_ok=True)
-error_log_path = logDir / 'error_log.log'
+error_log_dir = current_root / Path(config['DEFAULT']['errorlogDir']) 
+error_log_dir.mkdir(exist_ok=True)
+read_file_error_log_path = error_log_dir / 'read_files_error.log' 
+file_process_error_log_path = error_log_dir / 'file_process_error.log' 
 
 def remove_all_comments(content):
     # Regular expression pattern to match nested HTML comments
@@ -72,7 +78,7 @@ def remove_sql_query_comment(content):
     
     return content
 
-def process_file(file_path):
+def scan_process_file(file_path):
     try:
         with file_path.open('r', encoding='utf-8') as file:
             file_contents = file.read()
@@ -152,22 +158,17 @@ def process_file(file_path):
                                 query_analysis_logger.info("Where Columns: %s", where_columns)
                                 query_analysis_logger.info("===================================")
     except UnicodeDecodeError:
-        with error_log_path.open('a', encoding='utf-8') as error_log:
-            error_log.write(f'File: {file_path} - Unable to decode with utf-8\n')
+        with read_file_error_log_path.open('a', encoding='utf-8') as error_log:
+            error_log.write(f'{current_time} - Error in scan_files.py/process_file function: Unable to decode {file_path}\n')
+    except Exception as e:
+        with file_process_error_log_path.open('a', encoding='utf-8') as error_log:
+            error_log.write(f'{current_time} - Error in scan_files.py/process_file function: {e}\n')
 
-def main():
-    start_time = time.time()
-    print(f"Script started at: {time.ctime(start_time)}")
+def source_file_process(view_tables):
     files = [file for file in rootDir.rglob('*') if file.is_file()]
     for file in files:
-        process_file(file)
-    fnc.start_run(log_file, rootDir2, table_folder_path)
-    end_time = time.time()
+        scan_process_file(file)
+    fnc.start_run(log_file, rootTableListDir, table_folder_path, view_tables)
+    return file_name
 
-    print(f"Number of files containing <cfquery> tags: {len(file_name)}")
-    print(f"Script ended at: {time.ctime(end_time)}")
-    print(f"Total processing time: {end_time - start_time:.2f} seconds")
-
-if __name__ == "__main__":
-    main()
     

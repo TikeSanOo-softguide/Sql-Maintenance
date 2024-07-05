@@ -6,28 +6,29 @@ import logging
 import configparser
 import functions as fnc
 from pathlib import Path
+from functions import process_excel_file
 
+current_root = Path().resolve()
 # Create a folder if it doesn't exist
 folder_path = "logs"
-view_table_folder_path = "view_table_list"
 
 if not os.path.exists(folder_path):
     os.makedirs(folder_path)
 
 today_date = datetime.today().strftime('%Y_%m_%d_%H_%M_%S')
 # Set up logging
-log_file = os.path.join(folder_path, f"query_analysis_for_view{today_date}.log")
-require_log_file = os.path.join(folder_path, f"require_query_for_view{today_date}.log")
+log_file = os.path.join(folder_path, f"query_analysis_for_view_{today_date}.log")
+require_log_file = os.path.join(folder_path, f"require_query_for_view_{today_date}.log")
 
 # Configure the logger for query_analysis.log
-query_analysis_logger = logging.getLogger('query_analysis_logger')
+query_analysis_logger = logging.getLogger('query_analysis_logger_view')
 query_analysis_logger.setLevel(logging.INFO)
 query_analysis_handler = logging.FileHandler(log_file, mode='w', encoding='utf-8')
 query_analysis_handler.setFormatter(logging.Formatter('%(message)s'))
 query_analysis_logger.addHandler(query_analysis_handler)
 
 # Configure a separate logger for require_files_query_analysis.log
-require_logger = logging.getLogger('require_files_logger')
+require_logger = logging.getLogger('require_files_logger_view')
 require_logger.setLevel(logging.INFO)
 require_handler = logging.FileHandler(require_log_file, mode='w', encoding='utf-8')
 require_handler.setFormatter(logging.Formatter('%(message)s'))
@@ -36,17 +37,22 @@ require_logger.addHandler(require_handler)
 config = configparser.ConfigParser()
 config.read('config.ini', encoding='utf-8')
 rootViewDir = Path(config['DEFAULT']['rootViewDir'])
-rootViewDir2 = Path(config['DEFAULT']['view_table_list_file_dir'])
 
-logDir = Path("logfile")
+
+viewTableDir = current_root / Path(config['DEFAULT']['view_table_list_file_dir'])
+view_table_folder_path = Path(config['DEFAULT']['view_table_list_file_dir']) 
+error_log_dir = current_root / Path(config['DEFAULT']['errorlogDir']) 
+
 # view_query_pattern = re.compile(r"GO\s+(CREATE VIEW.*?GO)", re.DOTALL | re.IGNORECASE)
 view_query_pattern = re.compile(r"GO\s+(CREATE VIEW.*?)(?=\bGO\b|\Z)", re.DOTALL | re.IGNORECASE)
 view_table_name_pattern = re.compile(r'CREATE\s+VIEW\s+(\[.*?\])\s+AS', re.DOTALL | re.IGNORECASE)
 file_name = []
 view_names = []
 
-logDir.mkdir(exist_ok=True)
-error_log_path = logDir / 'error_log.log'
+error_log_dir = current_root / Path(config['DEFAULT']['errorlogDir']) 
+error_log_dir.mkdir(exist_ok=True)
+read_file_error_log_path = error_log_dir / 'read_files_error.log' 
+file_process_error_log_path = error_log_dir / 'file_process_error.log' 
 
 def remove_all_comments(content):
     # Regular expression pattern to match nested HTML comments
@@ -86,6 +92,7 @@ def process_file(file_path):
             if matches:
                 file_path_list = []
                 file_name.append(file_path.name)
+
                 query_analysis_logger.info(file_path)
                 for match in matches:
                     view_table_names = view_table_name_pattern.findall(match)
@@ -93,7 +100,7 @@ def process_file(file_path):
                     sql_query = re.sub(re.escape(for_remove.group(0)), '', match)
                     view_table_name_with_db = re.sub(square_brackets_regex, r"\1", view_table_names[0])
                     view_table_name = view_table_name_with_db.split('.')[-1]
-
+                    view_names.append(view_table_name.lower())
                     is_select = fnc.has_select_query(sql_query)
                     is_insert = fnc.has_insert_query(sql_query)
                     is_update = fnc.has_update_query(sql_query)
@@ -161,19 +168,26 @@ def process_file(file_path):
                             query_analysis_logger.info("Where Columns: %s", where_columns)
                             query_analysis_logger.info("===================================")
     except UnicodeDecodeError:
-        with error_log_path.open('a', encoding='utf-8') as error_log:
-            error_log.write(f'File: {file_path} - Unable to decode with utf-8\n')
+        with read_file_error_log_path.open('a', encoding='utf-8') as error_log:
+            error_log.write(f'{today_date} - Error in scan_files_for_view.py/process_file function: Unable to decode {file_path}\n')
+    except Exception as e:
+        with file_process_error_log_path.open('a', encoding='utf-8') as error_log:
+            error_log.write(f'{today_date} - Error in scan_files_for_view.py/process_file function: {e}\n')
 
+                     
 def main():
     start_time = time.time()
     print(f"Script started at: {time.ctime(start_time)}")
     files = [file for file in rootViewDir.rglob('*') if file.is_file()]
     for file in files:
         process_file(file)
-    fnc.start_run(log_file, rootViewDir2, view_table_folder_path)
+   
+    fnc.start_run(log_file, viewTableDir, view_table_folder_path)
+    file_names =  fnc.source_file_process(view_names)
+    process_excel_file()
     end_time = time.time()
-
-    print(f"Number of files containing <cfquery> tags: {len(file_name)}")
+    
+    print(f"Number of files containing query: {len(file_name) + len(file_names)}")
     print(f"Script ended at: {time.ctime(end_time)}")
     print(f"Total processing time: {end_time - start_time:.2f} seconds")
 
